@@ -51,6 +51,7 @@
 ";"               return 'NL';
 [^\+\->:\n,;]+      { yytext = yytext.trim(); return 'ACTOR'; }
 "->>"             return 'SOLID_ARROW';
+">>>"             return 'GROUP_ARROW';
 "-->>"            return 'DOTTED_ARROW';
 "->"              return 'SOLID_OPEN_ARROW';
 "-->"             return 'DOTTED_OPEN_ARROW';
@@ -91,6 +92,8 @@ statement
 	: 'participant' actor 'AS' restOfLine 'NL' {$2.description=$4; $$=$2;}
 	| 'participant' actor 'NL' {$$=$2;}
 	| signal 'NL'
+  | actor GROUP_ARROW actor 'NL'
+  { $$ = [$1,$3,{type: 'addGroup', parent:$1.actor, child:$3.actor}]}
 	| 'activate' actor 'NL' {$$={type: 'activeStart', signalType: yy.LINETYPE.ACTIVE_START, actor: $2};}
 	| 'deactivate' actor 'NL' {$$={type: 'activeEnd', signalType: yy.LINETYPE.ACTIVE_END, actor: $2};}
 	| note_statement 'NL'

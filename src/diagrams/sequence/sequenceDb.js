@@ -1,53 +1,98 @@
-import { logger } from '../../logger';
+import { logger } from '../../logger'
 
-let actors = {};
-let messages = [];
-const notes = [];
-let title = '';
+let actors = {}
+let messages = []
+const notes = []
+let title = ''
 
-export const addActor = function(id, name, description) {
+export const addActor = function (id, name, description) {
   // Don't allow description nulling
-  const old = actors[id];
-  if (old && name === old.name && description == null) return;
+  const old = actors[id]
+  if (old && name === old.name && description == null) return
 
   // Don't allow null descriptions, either
-  if (description == null) description = name;
+  if (description == null) description = name
 
-  actors[id] = { name: name, description: description };
-};
+  actors[id] = { name: name, description: description, children: [], parent: null }
+}
 
-export const addMessage = function(idFrom, idTo, message, answer) {
-  messages.push({ from: idFrom, to: idTo, message: message, answer: answer });
-};
+export const addGroup = function (idParent, idChild) {
+  if (!actors[idParent]) {
+    addActor(idParent, idParent)
+  }
+  if (!actors[idChild]) {
+    addActor(idChild, idChild)
+  }
+  actors[idParent].children.push(idChild)
+  actors[idChild].parent = idParent
+  console.log('adding group', idParent, idChild)
+}
 
-export const addSignal = function(idFrom, idTo, message, messageType) {
+export const addMessage = function (idFrom, idTo, message, answer) {
+  messages.push({ from: idFrom, to: idTo, message: message, answer: answer })
+}
+
+export const addSignal = function (idFrom, idTo, message, messageType) {
   logger.debug(
     'Adding message from=' + idFrom + ' to=' + idTo + ' message=' + message + ' type=' + messageType
-  );
-  messages.push({ from: idFrom, to: idTo, message: message, type: messageType });
-};
+  )
+  messages.push({ from: idFrom, to: idTo, message: message, type: messageType })
+}
 
-export const getMessages = function() {
-  return messages;
-};
+export const getMessages = function () {
+  return messages
+}
 
-export const getActors = function() {
-  return actors;
-};
-export const getActor = function(id) {
-  return actors[id];
-};
-export const getActorKeys = function() {
-  return Object.keys(actors);
-};
-export const getTitle = function() {
-  return title;
-};
+export const getActors = function () {
+  function findLevel (actors, actor, level) {
+    if (actors[actor] && !!actors[actor].children.length == 0) {
+      return 0 + level
+    }
 
-export const clear = function() {
-  actors = {};
-  messages = [];
-};
+    return actors[actor].children.map(child => {
+      return findLevel(actors, child, level + 1)
+    }).sort().reverse()[0]
+  }
+
+  function countChildren (actors, actor, level) {
+    if (actors[actor] && !!actors[actor].children.length == 0) {
+      return level
+    }
+
+    return actors[actor].children.map(child => {
+      return countChildren(actors, child, level) + 1
+    }).reduce((a, b) => a + b, 0)
+  }
+
+  Object.keys(actors)
+    .forEach(actor => {
+      actors[actor].level = findLevel(actors, actor, 0)
+      actors[actor].count = countChildren(actors, actor, 0)
+    })
+
+  const maxLevel = Object.keys(actors).map(d => actors[d].level).sort().reverse()[0] || 0
+
+  Object.keys(actors)
+    .forEach(actor => {
+      actors[actor].inverseLevel = maxLevel - actors[actor].level
+    })
+
+  return actors
+}
+export const getActor = function (id) {
+  return actors[id]
+}
+export const getActorKeys = function () {
+  return Object.keys(actors)
+}
+export const getTitle = function () {
+  return title
+}
+
+export const clear = function () {
+  actors = {}
+  messages = []
+}
 
 export const LINETYPE = {
   SOLID: 0,
@@ -71,106 +116,110 @@ export const LINETYPE = {
   PAR_END: 21,
   RECT_START: 22,
   RECT_END: 23
-};
+}
 
 export const ARROWTYPE = {
   FILLED: 0,
   OPEN: 1
-};
+}
 
 export const PLACEMENT = {
   LEFTOF: 0,
   RIGHTOF: 1,
   OVER: 2
-};
+}
 
-export const addNote = function(actor, placement, message) {
-  const note = { actor: actor, placement: placement, message: message };
+export const addNote = function (actor, placement, message) {
+  const note = { actor: actor, placement: placement, message: message }
 
   // Coerce actor into a [to, from, ...] array
-  const actors = [].concat(actor, actor);
+  const actors = [].concat(actor, actor)
 
-  notes.push(note);
+  notes.push(note)
   messages.push({
     from: actors[0],
     to: actors[1],
     message: message,
     type: LINETYPE.NOTE,
     placement: placement
-  });
-};
+  })
+}
 
-export const setTitle = function(titleText) {
-  title = titleText;
-};
+export const setTitle = function (titleText) {
+  title = titleText
+}
 
-export const apply = function(param) {
+export const apply = function (param) {
   if (param instanceof Array) {
-    param.forEach(function(item) {
-      apply(item);
-    });
+    param.forEach(function (item) {
+      apply(item)
+    })
   } else {
     switch (param.type) {
       case 'addActor':
-        addActor(param.actor, param.actor, param.description);
-        break;
+        addActor(param.actor, param.actor, param.description)
+        break
+      case 'addGroup':
+        addGroup(param.parent, param.child)
+        break
       case 'activeStart':
-        addSignal(param.actor, undefined, undefined, param.signalType);
-        break;
+        addSignal(param.actor, undefined, undefined, param.signalType)
+        break
       case 'activeEnd':
-        addSignal(param.actor, undefined, undefined, param.signalType);
-        break;
+        addSignal(param.actor, undefined, undefined, param.signalType)
+        break
       case 'addNote':
-        addNote(param.actor, param.placement, param.text);
-        break;
+        addNote(param.actor, param.placement, param.text)
+        break
       case 'addMessage':
-        addSignal(param.from, param.to, param.msg, param.signalType);
-        break;
+        addSignal(param.from, param.to, param.msg, param.signalType)
+        break
       case 'loopStart':
-        addSignal(undefined, undefined, param.loopText, param.signalType);
-        break;
+        addSignal(undefined, undefined, param.loopText, param.signalType)
+        break
       case 'loopEnd':
-        addSignal(undefined, undefined, undefined, param.signalType);
-        break;
+        addSignal(undefined, undefined, undefined, param.signalType)
+        break
       case 'rectStart':
-        addSignal(undefined, undefined, param.color, param.signalType);
-        break;
+        addSignal(undefined, undefined, param.color, param.signalType)
+        break
       case 'rectEnd':
-        addSignal(undefined, undefined, undefined, param.signalType);
-        break;
+        addSignal(undefined, undefined, undefined, param.signalType)
+        break
       case 'optStart':
-        addSignal(undefined, undefined, param.optText, param.signalType);
-        break;
+        addSignal(undefined, undefined, param.optText, param.signalType)
+        break
       case 'optEnd':
-        addSignal(undefined, undefined, undefined, param.signalType);
-        break;
+        addSignal(undefined, undefined, undefined, param.signalType)
+        break
       case 'altStart':
-        addSignal(undefined, undefined, param.altText, param.signalType);
-        break;
+        addSignal(undefined, undefined, param.altText, param.signalType)
+        break
       case 'else':
-        addSignal(undefined, undefined, param.altText, param.signalType);
-        break;
+        addSignal(undefined, undefined, param.altText, param.signalType)
+        break
       case 'altEnd':
-        addSignal(undefined, undefined, undefined, param.signalType);
-        break;
+        addSignal(undefined, undefined, undefined, param.signalType)
+        break
       case 'setTitle':
-        setTitle(param.text);
-        break;
+        setTitle(param.text)
+        break
       case 'parStart':
-        addSignal(undefined, undefined, param.parText, param.signalType);
-        break;
+        addSignal(undefined, undefined, param.parText, param.signalType)
+        break
       case 'and':
-        addSignal(undefined, undefined, param.parText, param.signalType);
-        break;
+        addSignal(undefined, undefined, param.parText, param.signalType)
+        break
       case 'parEnd':
-        addSignal(undefined, undefined, undefined, param.signalType);
-        break;
+        addSignal(undefined, undefined, undefined, param.signalType)
+        break
     }
   }
-};
+}
 
 export default {
   addActor,
+  addGroup,
   addMessage,
   addSignal,
   getMessages,
@@ -185,4 +234,4 @@ export default {
   addNote,
   setTitle,
   apply
-};
+}
